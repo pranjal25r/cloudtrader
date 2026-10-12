@@ -1,0 +1,55 @@
+# portfolio-service: a Deployment (runs the container) and a NodePort Service (reachable from your laptop).
+# Apply with:  kubectl apply -f k8s/portfolio-service.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portfolio-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portfolio-service
+  template:
+    metadata:
+      labels:
+        app: portfolio-service
+    spec:
+      containers:
+        - name: portfolio-service
+          image: portfolio-service:1.0
+          imagePullPolicy: IfNotPresent   # use the image built on this machine, don't pull from the internet
+          ports:
+            - containerPort: 8082
+          env:
+            - name: DB_URL
+              value: jdbc:mysql://mysql:3306/cloudtrader   # "mysql" = the headless Service name
+            - name: DB_USER
+              value: trader
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: password
+            - name: MARKET_URL
+              value: http://market-service:8081            # the market-service Service name
+          # Only receive traffic once the app is up and can reach the database
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+# NodePort opens port 30082 on the machine, so http://localhost:30082 reaches this service
+apiVersion: v1
+kind: Service
+metadata:
+  name: portfolio-service
+spec:
+  type: NodePort
+  selector:
+    app: portfolio-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+      nodePort: 30082

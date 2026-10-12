@@ -1,0 +1,84 @@
+# MySQL for CloudTrader: a Secret (passwords), a headless Service (stable name) and a StatefulSet (the database itself).
+# Apply with:  kubectl apply -f k8s/mysql.yaml
+
+# --- Secret: keeps the passwords out of the Deployment files -----------------
+# These are local development passwords. Use different ones anywhere that is not your laptop.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+stringData:
+  root-password: root123
+  password: trader123
+---
+# --- Headless Service: gives the database pod a fixed DNS name, "mysql" -------
+# "clusterIP: None" means no load balancer in front; the name points straight at the pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  clusterIP: None
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+---
+# --- StatefulSet: one MySQL pod (mysql-0) that keeps the same disk across restarts
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3306
+          env:
+            # On first start the MySQL image creates this database and this user
+            - name: MYSQL_DATABASE
+              value: cloudtrader
+            - name: MYSQL_USER
+              value: trader
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: password
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: root-password
+          # Kubernetes only sends traffic once the database really accepts logins as "trader"
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysql -h 127.0.0.1 -u trader -p\"$MYSQL_PASSWORD\" -e 'SELECT 1' cloudtrader"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql   # where MySQL keeps its files
+  # Each pod gets its own PersistentVolumeClaim made from this template (mysql-data-mysql-0).
+  # The data survives pod restarts because the claim is not deleted with the pod.
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

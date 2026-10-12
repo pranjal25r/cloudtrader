@@ -1,0 +1,7 @@
+# Maven build output (jars, compiled classes, test reports)
+target/
+.DS_Store
+
+# Personal working notes, kept on the laptop only
+HANDOFF_PROMPT.md
+EXPLAIN.md
