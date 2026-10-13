@@ -19,9 +19,4 @@ SELECT
     ROUND(100 + RAND() * 400, 2)
 FROM numbers;
 
--- A big bulk insert makes MySQL reserve more ids than it uses (the next id would be about 1,048,561,
--- not 1,000,001). The retention job keeps "the newest 50,000 ids", so that gap of unused ids would
--- make it keep far fewer than 50,000 rows. This puts the id counter back to "highest id + 1".
-ALTER TABLE price_history AUTO_INCREMENT = 1;
-
 SELECT COUNT(*) AS price_rows FROM price_history;

@@ -54,10 +54,15 @@ Improvement of `sql` over `java`, on the medians:
 
 Both methods returned exactly the same holdings and the same total P&L.
 
-## One thing to know about the seed script
+## What the benchmark found in the retention job
 
-The retention job keeps "the newest 50,000 ids", not "the newest 50,000 rows".
-A bulk insert makes MySQL reserve more ids than it uses: after inserting 1,000,000 rows the next id was 1,048,561,
-not 1,000,001. In a first attempt, that gap made retention keep only about 1,460 rows instead of 50,000.
-`seed_prices.sql` now ends with `ALTER TABLE price_history AUTO_INCREMENT = 1`, which puts the counter back to
-"highest id + 1". The numbers above are from the runs after that fix. The numbers from the first attempt were thrown away.
+An earlier version of the retention job kept the newest 50,000 ids, not the newest 50,000 rows (`MAX(id) - 50000`).
+The benchmark exposed this. The bulk seed made MySQL reserve more ids than it used: after 1,000,000 rows were
+inserted, the next id was 1,048,561, not 1,000,001. With that gap, retention kept only about 1,460 rows instead
+of 50,000. The numbers from that attempt were thrown away. For the runs above, the id counter was reset after
+seeding, so there was no gap and the table was trimmed to 50,000 rows.
+
+Retention was then fixed to count rows: it finds the id of the 50,000th-newest row and deletes everything older.
+The fix was checked on 13 October 2026 with 1,000,000 seeded rows and the id gap left in place. It deleted 950,000
+rows and kept the table at about 50,000. The latency numbers above were not measured again, because the fix only
+changed which rows are deleted, not the `/prices/stats` or `/portfolio` queries that were timed.

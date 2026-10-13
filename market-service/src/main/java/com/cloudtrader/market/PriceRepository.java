@@ -77,14 +77,16 @@ public class PriceRepository {
 
     /**
      * Rolling retention: keep only the newest maxRows rows, delete everything older.
-     * ids only ever go up, so "older" simply means "id is too small".
+     * Finds the id of the maxRows-th newest row, then deletes every row with a smaller id.
      * Returns how many rows were deleted.
      */
     public int deleteAllButNewest(long maxRows) {
-        Long newestId = jdbc.queryForObject("SELECT MAX(id) FROM price_history", Long.class);
-        if (newestId == null) {
-            return 0; // table is empty
+        // Find the id of the maxRows-th newest row. Everything older than it is deleted.
+        List<Long> cutoff = jdbc.queryForList(
+                "SELECT id FROM price_history ORDER BY id DESC LIMIT 1 OFFSET ?", Long.class, maxRows - 1);
+        if (cutoff.isEmpty()) {
+            return 0; // fewer than maxRows rows, nothing to delete
         }
-        return jdbc.update("DELETE FROM price_history WHERE id <= ?", newestId - maxRows);
+        return jdbc.update("DELETE FROM price_history WHERE id < ?", cutoff.get(0));
     }
 }
